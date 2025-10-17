@@ -1,0 +1,241 @@
+import 'package:flutter/material.dart';
+import 'package:budget_planner_app/add_expense_sheet.dart';
+import 'package:budget_planner_app/app_colors.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:intl/intl.dart';
+
+// Harcama verisini modellemek için basit bir class.
+class Expense {
+  final String category;
+  final double amount;
+  final DateTime date;
+
+  Expense({required this.category, required this.amount, required this.date});
+}
+
+class HomeScreen extends StatefulWidget {
+  final double salary;
+  final int payday;
+
+  const HomeScreen({super.key, required this.salary, required this.payday});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  late double _remainingSalary;
+  final List<Expense> _expenses = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _remainingSalary = widget.salary;
+  }
+
+  void _openAddExpenseSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true, // Panelin klavye ile yukarı kaymasını sağlar.
+      backgroundColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return AddExpenseSheet(onSave: _addExpense);
+      },
+    );
+  }
+
+  void _addExpense(String category, double amount) {
+    final newExpense = Expense(
+      category: category,
+      amount: amount,
+      date: DateTime.now(),
+    );
+    setState(() {
+      _expenses.add(newExpense);
+      _remainingSalary -= amount;
+    });
+  }
+
+  void _deleteExpense(int index) {
+    final expenseToRemove = _expenses[index];
+    setState(() {
+      _expenses.removeAt(index);
+      _remainingSalary += expenseToRemove.amount;
+    });
+
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Expense deleted'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () {
+            setState(() {
+              _expenses.insert(index, expenseToRemove);
+              _remainingSalary -= expenseToRemove.amount;
+            });
+          },
+        ),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Günlük limiti hesapla. Bakiye pozitifse 30'a böl, değilse 0 göster.
+    final double dailyLimit = _remainingSalary > 0 ? _remainingSalary / 30 : 0;
+    final currencyFormat = NumberFormat.currency(locale: 'en_US', symbol: '\$');
+
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            pinned: true,
+            stretch: true,
+            expandedHeight: 250.0,
+            backgroundColor: AppColors.primary,
+            automaticallyImplyLeading: false,
+            flexibleSpace: FlexibleSpaceBar(
+              titlePadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+              centerTitle: false,
+              title: const Text('Dashboard', style: TextStyle(fontWeight: FontWeight.bold)),
+              background: Container(
+                padding: const EdgeInsets.only(bottom: 60, left: 24, right: 24),
+                alignment: Alignment.bottomLeft,
+                decoration: BoxDecoration(gradient: AppColors.primaryGradient),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Available Balance',
+                      style: TextStyle(color: Colors.white70, fontSize: 16),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      currencyFormat.format(_remainingSalary),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+              child: _buildInfoCard(
+                title: 'Daily Spend Limit',
+                value: currencyFormat.format(dailyLimit),
+                icon: Icons.local_fire_department_rounded,
+                color: AppColors.accentYellow,
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+              child: Text('Recent Expenses',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            ),
+          ),
+          _buildExpensesList(),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openAddExpenseSheet,
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.white,
+        elevation: 8,
+        shape: const CircleBorder(),
+        child: const Icon(Icons.add),
+      ).animate(onPlay: (controller) => controller.repeat())
+       .shimmer(delay: 2000.ms, duration: 1800.ms)
+       .scale(begin: const Offset(1,1), end: const Offset(1.1,1.1), duration: 600.ms)
+       .then(delay: 200.ms)
+       .scale(begin: const Offset(1.1,1.1), end: const Offset(1,1), duration: 600.ms),
+    );
+  }
+
+  Widget _buildInfoCard({required String title, required String value, required IconData icon, required Color color}) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withAlpha(13), blurRadius: 10, offset: const Offset(0, 4)), // 5% opacity
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 32),
+          const SizedBox(width: 16),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+              const SizedBox(height: 4),
+              Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExpensesList() {
+    if (_expenses.isEmpty) {
+      return const SliverToBoxAdapter(
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 50.0),
+            child: Text('No expenses added yet.', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+        ),
+      );
+    }
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final expense = _expenses[index];
+          return Dismissible(
+            key: ValueKey(expense),
+            onDismissed: (direction) {
+              _deleteExpense(index);
+            },
+            direction: DismissDirection.endToStart,
+            background: Container(
+              color: AppColors.expense,
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.only(right: 20.0),
+              child: const Icon(Icons.delete, color: Colors.white),
+            ),
+            child: ListTile(
+              leading: const CircleAvatar(
+                  backgroundColor: AppColors.accentRed,
+                  child: Icon(Icons.shopping_cart, color: AppColors.white, size: 20)),
+              title: Text(expense.category,
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text(DateFormat.yMMMd().format(expense.date)),
+              trailing: Text(
+                '-${NumberFormat.currency(locale: 'en_US', symbol: '\$').format(expense.amount)}',
+                style: const TextStyle(
+                    color: AppColors.expense, fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+          );
+        },
+        childCount: _expenses.length,
+      ),
+    );
+  }
+}
